@@ -1,0 +1,5 @@
+{
+  "name": "Banafit AI Studio-2",
+  "description": "전문 패션 AI 워크플로우 도구입니다. 제품 사진을 업로드하고, 프롬프트 레이어를 정의하고, Gemini 2.5 Flash를 사용하여 변형을 생성하고, 결과를 정밀하게 수정하세요.",
+  "requestFramePermissions": []
+}
