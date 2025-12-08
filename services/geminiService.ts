@@ -1,15 +1,6 @@
 
 import { GoogleGenAI } from "@google/genai";
-
-// 환경 변수에서 API 키를 가져옵니다.
-const API_KEY = process.env.API_KEY;
-
-if (!API_KEY) {
-  console.error("환경 변수에 API_KEY가 설정되지 않았습니다.");
-}
-
-// Gemini 클라이언트 초기화
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+import { ReferenceConfig } from "../types";
 
 // 사용할 모델 정의 (이미지 생성/편집용 최신 모델)
 const IMAGE_MODEL = 'gemini-2.5-flash-image';
@@ -31,12 +22,6 @@ const getMimeType = (base64Str: string) => {
   return match ? match[1] : 'image/png';
 };
 
-// 참조 이미지 설정 타입 정의
-export interface ReferenceConfig {
-  data: string;
-  type: 'FACE' | 'BACKGROUND' | 'ACCESSORY';
-}
-
 /**
  * 단일 이미지 변형/편집을 생성합니다.
  * @param imageBase64 원본 이미지 (Base64)
@@ -50,7 +35,8 @@ export const generateImageVariation = async (
   referenceConfig?: ReferenceConfig | null,
   mimeType: string = 'image/png' // 타입 감지 실패 시 기본값
 ): Promise<string> => {
-  if (!API_KEY) throw new Error("API 키를 찾을 수 없습니다.");
+  // Initialize client inside function to avoid top-level crash if process is undefined during load
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   try {
     const inputMimeType = getMimeType(imageBase64) || mimeType;
@@ -80,22 +66,56 @@ export const generateImageVariation = async (
       
       // 참조 유형에 따른 시스템 프롬프트 구성
       if (referenceConfig.type === 'FACE') {
-        finalPrompt = `[SYSTEM] Image 1 is the main reference for clothing, pose, and composition. Image 2 is the face reference.
-Task: Swap the face of the model in Image 1 with the face in Image 2. Maintain the pose, lighting, and skin tone of Image 1. Blend naturally.
-User Request: ${prompt}`;
+        finalPrompt = `[OPERATION: FACE SWAP]
+Image 1: TARGET (The main photo to be edited)
+Image 2: SOURCE FACE (The face identity to copy)
+
+INSTRUCTIONS:
+1. Identify the face in Image 2.
+2. Replace the face of the person in Image 1 with the face from Image 2.
+3. CRITICAL: Keep the hair, body, pose, clothing, and background of Image 1 EXACTLY THE SAME. Do not regenerate the entire image.
+4. Blend the new face naturally (match skin tone, lighting direction, and head angle of Image 1).
+
+User Note: ${prompt}
+
+OUTPUT: Return the edited image ONLY. Do not output text.`;
       } else if (referenceConfig.type === 'BACKGROUND') {
-        finalPrompt = `[SYSTEM] Image 1 is the foreground subject. Image 2 is the background reference.
-Task: Replace the background of Image 1 with the scene or style shown in Image 2. Keep the main subject (person or product) from Image 1 exactly as is. Match the lighting of the subject to the new background.
-User Request: ${prompt}`;
+        finalPrompt = `[OPERATION: BACKGROUND REPLACEMENT]
+Image 1: FOREGROUND SUBJECT
+Image 2: NEW BACKGROUND
+
+INSTRUCTIONS:
+1. Extract the main subject (person or product) from Image 1.
+2. Place the subject into the environment of Image 2.
+3. CRITICAL: Preserve the subject's pose, clothing, and details exactly.
+4. Adjust lighting and shadows on the subject to match the new background.
+
+User Note: ${prompt}
+
+OUTPUT: Return the edited image ONLY. Do not output text.`;
       } else if (referenceConfig.type === 'ACCESSORY') {
-        finalPrompt = `[SYSTEM] Image 1 is the main model/subject. Image 2 is an accessory item.
-Task: Add the accessory from Image 2 to the model in Image 1.
-Placement context: ${prompt}
-Ensure the accessory has correct perspective, shadow, and scaling to fit the model naturally.`;
+        finalPrompt = `[OPERATION: VIRTUAL TRY-ON]
+Image 1: MODEL
+Image 2: ACCESSORY
+
+INSTRUCTIONS:
+1. Place the accessory from Image 2 onto the model in Image 1.
+2. Context: ${prompt}
+3. Ensure realistic perspective, occlusion, and shadows.
+4. Do not change the model's face or body shape.
+
+OUTPUT: Return the edited image ONLY. Do not output text.`;
       }
     } else {
         // 참조 이미지가 없는 경우 일반 프롬프트 처리
-        finalPrompt = prompt;
+        // 단순 텍스트 프롬프트일 때도 이미지 생성을 강제
+        finalPrompt = `[OPERATION: IMAGE EDITING]
+Source Image: Provided inline
+Instruction: ${prompt}
+
+Action: Apply the instruction to the source image.
+Constraint: Maintain the original style and details unless strictly required to change.
+OUTPUT: Return the edited image ONLY. Do not output text description.`;
     }
 
     // 마지막 파트: 텍스트 프롬프트 추가
@@ -133,8 +153,10 @@ Ensure the accessory has correct perspective, shadow, and scaling to fit the mod
     }
 
     if (textResponse) {
+       // 텍스트가 반환되었지만 이미지가 없는 경우, 모델이 명령을 거부했거나 챗 모드로 동작한 것임
        const msg = textResponse.length > 200 ? textResponse.substring(0, 200) + "..." : textResponse;
-       throw new Error(`AI 응답 (이미지 없음): ${msg}`);
+       console.warn("AI returned text instead of image:", textResponse);
+       throw new Error(`AI가 이미지를 생성하지 않고 텍스트로 응답했습니다: "${msg}"`);
     }
 
     throw new Error("응답에서 이미지 데이터를 찾을 수 없습니다.");
@@ -144,6 +166,18 @@ Ensure the accessory has correct perspective, shadow, and scaling to fit the mod
     throw new Error(error.message || "이미지 생성에 실패했습니다.");
   }
 };
+
+/**
+ * 배치 생성 시 다양성을 확보하기 위한 미세 변형 프롬프트 목록
+ * 헤어스타일과 조명에 변화를 주어 다양한 한국인 모델 이미지를 생성하도록 유도
+ */
+const BATCH_VARIATIONS = [
+  "Style A: Long straight silky hair, soft professional studio lighting, serene expression.",
+  "Style B: Natural wavy perm hairstyle, warm sunlight from right side, subtle smile.",
+  "Style C: Ponytail or tied-back hair, clean neck line, chic and confident look, high contrast lighting.",
+  "Style D: Shoulder-length medium bob cut (C-curl), modern city vibe, direct gaze.",
+  "Style E: Natural loose hair with volume, fashion editorial style, dramatic shadowing."
+];
 
 /**
  * 일괄(Batch) 이미지 생성을 시뮬레이션합니다.
@@ -161,9 +195,18 @@ export const generateBatchImages = async (
     : null;
 
   // 요청 수(count)만큼 비동기 호출 배열 생성
-  const promises = Array.from({ length: count }).map(() => 
-    generateImageVariation(imageBase64, prompt, refConfig)
-  );
+  const promises = Array.from({ length: count }).map(() => {
+    // 랜덤하게 스타일 변형 선택 (순차적 할당 대신 랜덤성 부여하여 3장 생성 시에도 다양한 스타일 나오게 함)
+    const randomIndex = Math.floor(Math.random() * BATCH_VARIATIONS.length);
+    const variation = BATCH_VARIATIONS[randomIndex];
+    
+    // 얼굴 참조가 있을 때와 없을 때 프롬프트 결합 방식이 다르지만,
+    // generateImageVariation 내부에서 prompt를 'User Note' 등에 삽입하므로
+    // 여기서 텍스트를 확장해서 넘겨주면 됨.
+    const variedPrompt = `${prompt}\n\n[System Note for Diversity: Ensure this generated image has unique characteristics. ${variation}]`;
+
+    return generateImageVariation(imageBase64, variedPrompt, refConfig);
+  });
   
   // 모든 요청이 완료될 때까지 대기 (Promise.all)
   return Promise.all(promises);

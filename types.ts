@@ -43,6 +43,14 @@ export interface GenerationConfig {
   type: 'MODEL_CHANGE' | 'TRY_ON' | 'PRODUCT_ONLY'; // 생성 유형 (모델 변경, 착용샷, 상품 누끼)
   keepModel: boolean; // 모델 유지 여부 (현재 미사용, 확장성 고려)
   removeWatermark: boolean; // 워터마크 및 텍스트 제거 옵션 추가
+  targetAge: '20s' | '30s' | '40s' | '50s'; // 타겟 모델 연령대
+  targetGender: 'Female' | 'Male'; // 타겟 모델 성별
+}
+
+// 참조 이미지 설정 타입 정의
+export interface ReferenceConfig {
+  data: string;
+  type: 'FACE' | 'BACKGROUND' | 'ACCESSORY';
 }
 
 // 애플리케이션의 전체 상태 (State)
