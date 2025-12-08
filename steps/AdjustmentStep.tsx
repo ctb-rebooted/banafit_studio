@@ -49,11 +49,16 @@ const AdjustmentStep: React.FC<AdjustmentStepProps> = ({ state, updateState, onA
           if (!finalPrompt.trim()) {
             finalPrompt = "Change the background to the reference image provided.";
           }
-       } else if (editTab === 'FACE' && faceEditImage) {
-          refConfig = { data: faceEditImage.base64, type: 'FACE' };
-          // 사용자가 입력한 텍스트가 없으면 기본 명령어 추가
-          if (!finalPrompt.trim()) {
-            finalPrompt = "Swap the face of the person with the reference face provided.";
+       } else if (editTab === 'FACE') {
+          // 이미지가 있으면 참조 설정, 없으면 텍스트 명령만 수행
+          if (faceEditImage) {
+            refConfig = { data: faceEditImage.base64, type: 'FACE' };
+            if (!finalPrompt.trim()) {
+              finalPrompt = "Swap the face of the person with the reference face provided.";
+            }
+          } else {
+             // 이미지가 없는 경우, 텍스트가 필수임 (버튼에서 이미 막지만 이중 안전장치)
+             if (!finalPrompt.trim()) return;
           }
        } else if (editTab === 'ACC' && accImage) {
           refConfig = { data: accImage.base64, type: 'ACCESSORY' };

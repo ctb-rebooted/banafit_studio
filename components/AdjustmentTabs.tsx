@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { Wand2, User, X, Upload, Watch, Mountain } from 'lucide-react';
+import React, { useState } from 'react';
+import { Wand2, User, X, Upload, Watch, Mountain, Palette } from 'lucide-react';
 import { BACKGROUND_PRESETS } from '../presets/backgrounds';
 
 // --- Shared Helper ---
@@ -22,6 +22,8 @@ const handleSingleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setter:
 
 // --- 1. Text Edit Tab ---
 export const TextEditTab = ({ editPrompt, setEditPrompt, onSubmit, isGenerating }: any) => {
+    const [helperColor, setHelperColor] = useState("#000000");
+
     const QUICK_EDITS = [
         { label: "워터마크 제거", text: "이미지 내의 텍스트와 워터마크를 자연스럽게 제거해줘" },
         { label: "조명 밝게", text: "전체적인 조명을 더 밝고 화사하게 만들어줘" },
@@ -49,6 +51,37 @@ export const TextEditTab = ({ editPrompt, setEditPrompt, onSubmit, isGenerating 
             placeholder='예: "빈티지 필터 추가", "더 웃는 표정으로"'
             className="w-full text-sm p-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none h-32 resize-none"
             />
+            
+            {/* Color Helper Section */}
+            <div className="pt-2 border-t border-slate-100">
+                <label className="text-xs font-medium text-slate-500 mb-2 flex items-center gap-1">
+                    <Palette size={12} /> 색상 코드 참조 (Helper)
+                </label>
+                <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                    <input 
+                        type="color" 
+                        value={helperColor}
+                        onChange={(e) => setHelperColor(e.target.value)}
+                        className="w-9 h-9 p-0.5 rounded cursor-pointer border border-slate-200"
+                    />
+                    <div className="flex-1">
+                        <input 
+                        type="text" 
+                        value={helperColor} 
+                        onChange={(e) => setHelperColor(e.target.value)}
+                        className="w-full text-xs font-mono bg-white border border-slate-200 rounded px-2 py-1.5 uppercase text-slate-600" 
+                        />
+                    </div>
+                    <button 
+                        type="button"
+                        onClick={() => setEditPrompt((prev: string) => (prev ? prev + " " : "") + helperColor)}
+                        className="text-xs bg-white border border-slate-200 px-2 py-1.5 rounded hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 text-slate-600 transition-colors"
+                    >
+                        입력창에 추가
+                    </button>
+                </div>
+            </div>
+
             <button onClick={onSubmit} disabled={isGenerating || !editPrompt} className="w-full bg-slate-900 text-white py-2 rounded-lg text-sm font-medium hover:bg-slate-800 disabled:opacity-50">편집 적용</button>
         </div>
     );
@@ -77,7 +110,12 @@ export const ColorEditTab = ({ editColor, setEditColor, onSubmit, isGenerating }
             />
             <div className="flex-1">
                 <p className="text-xs text-slate-500 mb-1">HEX CODE</p>
-                <input type="text" value={editColor} readOnly className="w-full font-mono bg-slate-50 border border-slate-200 rounded px-2 py-1" />
+                <input 
+                  type="text" 
+                  value={editColor} 
+                  onChange={(e) => setEditColor(e.target.value)}
+                  className="w-full font-mono bg-slate-50 border border-slate-200 rounded px-2 py-1 uppercase" 
+                />
             </div>
             </div>
             <div>
@@ -165,7 +203,7 @@ export const FaceTab = ({ editPrompt, setEditPrompt, faceEditImage, setFaceEditI
     return (
         <div className="space-y-4">
             <h3 className="font-semibold text-slate-900">얼굴 보정 및 교체</h3>
-            <p className="text-xs text-slate-500">원하는 모델의 얼굴 이미지를 업로드하여 현재 결과물의 얼굴을 교체하거나 보강합니다.</p>
+            <p className="text-xs text-slate-500">원하는 모델의 얼굴 이미지를 업로드하거나, 텍스트로 표정/스타일 변경을 요청하세요.</p>
             
             {faceEditImage ? (
             <div className="relative rounded-lg overflow-hidden border border-slate-200 mb-2">
@@ -178,7 +216,7 @@ export const FaceTab = ({ editPrompt, setEditPrompt, faceEditImage, setFaceEditI
             <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-200 border-dashed rounded-lg cursor-pointer hover:bg-slate-50">
                 <div className="text-center text-xs text-slate-500">
                     <User size={20} className="mx-auto mb-2 text-slate-400" />
-                    <span>교체할 얼굴 사진 업로드</span>
+                    <span>교체할 얼굴 사진 업로드 (선택)</span>
                 </div>
                 <input type="file" className="hidden" accept="image/*" onChange={(e) => handleSingleImageUpload(e, setFaceEditImage)} />
             </label>
@@ -187,12 +225,13 @@ export const FaceTab = ({ editPrompt, setEditPrompt, faceEditImage, setFaceEditI
             <textarea 
             value={editPrompt}
             onChange={(e) => setEditPrompt(e.target.value)}
-            placeholder="추가 요청 사항 (예: 자연스럽게 웃는 표정)"
+            placeholder="추가 요청 사항 (예: 자연스럽게 웃는 표정, 시선을 정면으로)"
             className="w-full text-sm p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 h-20 resize-none"
             />
 
-            <button onClick={onSubmit} disabled={isGenerating || !faceEditImage} className="w-full bg-slate-900 text-white py-2 rounded-lg text-sm font-medium hover:bg-slate-800 disabled:opacity-50">
-            얼굴 교체 실행
+            {/* 이미지가 없어도 텍스트 프롬프트가 있으면 실행 가능하도록 조건 변경 */}
+            <button onClick={onSubmit} disabled={isGenerating || (!faceEditImage && !editPrompt)} className="w-full bg-slate-900 text-white py-2 rounded-lg text-sm font-medium hover:bg-slate-800 disabled:opacity-50">
+            얼굴 교체 / 보정 실행
             </button>
         </div>
     );
